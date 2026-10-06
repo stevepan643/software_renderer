@@ -4,7 +4,6 @@
 #include "stb_image.h"
 #include "texture.h"
 #include "tiny_obj_c.h"
-#include "triangle.h"
 #include "window.h"
 
 #include <stdio.h>
