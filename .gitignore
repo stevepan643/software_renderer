@@ -1,5 +1,7 @@
 .vscode/
+.idea/
 build/
+cmake-build-*/
 compile_commands.json
 Rasterization
 Rasterization.exe
