@@ -14,26 +14,14 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL3 REQUIRED IMPORTED_TARGET SDL3)
 
 add_subdirectory(lib/stb)
+add_subdirectory(lib/tinyobjloader)
 
-set(SRCS
+add_executable(Rasterization
         src/main.c
         src/window.c
         src/pipeline.c
         src/texture.c
 )
-
-set(LIB_SRC
-        src/tiny_obj_c.c
-        src/tobj_tess.c
-)
-
-add_library(thirdparty OBJECT ${LIB_SRC})
-
-target_include_directories(thirdparty PRIVATE src)
-target_compile_definitions(thirdparty PRIVATE TOBJ_ENABLE_FILE_IO)
-target_compile_options(thirdparty PRIVATE -O2 -g)
-
-add_executable(Rasterization ${SRCS})
 
 set_target_properties(Rasterization PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -44,5 +32,5 @@ target_include_directories(Rasterization PRIVATE src)
 target_link_libraries(Rasterization PRIVATE
         PkgConfig::SDL3
         stb
-        $<TARGET_OBJECTS:thirdparty>
+        tobj
 )
