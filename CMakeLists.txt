@@ -14,6 +14,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL3 REQUIRED IMPORTED_TARGET SDL3)
 
 add_subdirectory(lib/stb)
+add_subdirectory(lib/glm)
 
 add_executable(sr
         src/main.cpp
@@ -30,4 +31,5 @@ target_include_directories(sr PRIVATE src)
 target_link_libraries(sr PRIVATE
         PkgConfig::SDL3
         stb
+        glm
 )
