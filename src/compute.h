@@ -312,4 +312,12 @@ static inline mat4f_t mat4f_rotate_z(float angle)
     return m;
 }
 
+static inline mat4f_t mat4f_rotate_xyz(float x, float y, float z)
+{
+    mat4f_t rx = mat4f_rotate_x(x);
+    mat4f_t ry = mat4f_rotate_y(y);
+    mat4f_t rz = mat4f_rotate_z(z);
+    return mat4f_mul(rz, mat4f_mul(ry, rx));
+}
+
 #endif /* RASTERIZER_COMPUTE_H */

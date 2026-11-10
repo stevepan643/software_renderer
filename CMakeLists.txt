@@ -21,6 +21,8 @@ add_executable(Rasterization
         src/window.c
         src/pipeline.c
         src/texture.c
+        src/mesh.h
+        src/mesh.c
 )
 
 set_target_properties(Rasterization PROPERTIES

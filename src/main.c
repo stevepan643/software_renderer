@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 
+#include "mesh.h"
+
 float *depth = NULL;
 size_t depth_size = 0;
 size_t depth_capacity = 0;
@@ -17,14 +19,6 @@ size_t color_size = 0;
 size_t color_capacity = 0;
 
 uint32_t msaa_level = 4;
-
-typedef struct
-{
-    vec3f_t pos;
-    vec3f_t normal;
-    vec3f_t color;
-    vec2f_t uv;
-} vertex_t;
 
 typedef struct
 {
@@ -127,7 +121,11 @@ void fs(vec2f_t screen_pos, float fdepth, const void *in, color_t *out_color, vo
 
     float lod = fmaxf(0.0f, log2f(dist * 0.2f));
 
-    color_t tex_color = texture_sample(tex, v->uv.x, v->uv.y, lod);
+    color_t tex_color;
+    if (tex != NULL)
+        tex_color = texture_sample(tex, v->uv.x, v->uv.y, lod);
+    else
+        tex_color = (color_t){200, 200, 200};
 
     vec3f_t albedo = (vec3f_t){tex_color.r / 255.0f, tex_color.g / 255.0f, tex_color.b / 255.0f};
 
@@ -236,67 +234,17 @@ int main(void)
     window_t *window = NULL;
     init(&window);
 
-    tobj_scene_f scene;
-    tobj_load_config cfg = tobj_default_config();
-    tobj_diag diag = {0};
+    mesh_t *sphere = mesh_load_obj("resource/sphere.obj");
+    mesh_t *bunny = mesh_load_obj("resource/stanford-bunny.obj");
+    mesh_t *cube = mesh_load_obj("resource/cube.obj");
+    mesh_t *viking_room = mesh_load_obj("resource/viking_room.obj");
 
-    if (tobj_load_obj_from_file(&scene, "resource/sphere.obj", &cfg, &diag) != TOBJ_OK)
-    {
-        fprintf(stderr, "Failed to load OBJ: %s\n", diag.err ? diag.err : "Unknown error");
-        return 1;
-    }
-
-    size_t total_indices = 0;
-    for (size_t s = 0; s < scene.num_shapes; s++)
-    {
-        total_indices += scene.shapes[s].mesh.num_indices;
-    }
+    printf("Viking room: %ld vertices, %ld triangles\n", viking_room->vertices_count, viking_room->indices_count / 3);
 
     vertex_attr_t attr[] = {{0, VERT_ATTR_FLOAT3, offsetof(vertex_t, pos)},
                             {1, VERT_ATTR_FLOAT3, offsetof(vertex_t, normal)},
                             {2, VERT_ATTR_FLOAT3, offsetof(vertex_t, color)},
                             {3, VERT_ATTR_FLOAT2, offsetof(vertex_t, uv)}};
-
-    vertex_t *vertices = malloc(total_indices * sizeof(vertex_t));
-    uint32_t *indices = malloc(total_indices * sizeof(uint32_t));
-    size_t vertex_count = 0;
-
-    for (size_t s = 0; s < scene.num_shapes; s++)
-    {
-        const tobj_mesh_f *mesh = &scene.shapes[s].mesh;
-
-        for (size_t i = 0; i < mesh->num_indices; i++)
-        {
-            tobj_index idx = mesh->indices[i];
-            vertex_t v = {0};
-
-            // Position
-            v.pos.x = scene.attrib.vertices.ptr[3 * idx.vertex_index + 0];
-            v.pos.y = scene.attrib.vertices.ptr[3 * idx.vertex_index + 1];
-            v.pos.z = scene.attrib.vertices.ptr[3 * idx.vertex_index + 2];
-
-            // Normal
-            if (scene.attrib.normals.ptr != NULL && idx.normal_index >= 0)
-            {
-                v.normal.x = scene.attrib.normals.ptr[3 * idx.normal_index + 0];
-                v.normal.y = scene.attrib.normals.ptr[3 * idx.normal_index + 1];
-                v.normal.z = scene.attrib.normals.ptr[3 * idx.normal_index + 2];
-            }
-
-            // UV Coordinates
-            if (scene.attrib.texcoords.ptr != NULL && idx.texcoord_index >= 0)
-            {
-                v.uv.x = scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 0];
-                v.uv.y = scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 1];
-            }
-
-            v.color = (vec3f_t){1.0f, 1.0f, 1.0f};
-
-            vertices[vertex_count] = v;
-            indices[vertex_count] = (uint32_t)vertex_count;
-            vertex_count++;
-        }
-    }
 
     float n = 0.01f, f = 100.0f;
     float fov_y = 45.0f * ((float)M_PI / 180.0f);
@@ -312,6 +260,7 @@ int main(void)
     program_link(program, sizeof(varing_t));
 
     texture_t *texture = texture_create("resource/wall1.png", WRAP_REPEAT, FILTER_BILINEAR, true);
+    texture_t *viking_tex = texture_create("resource/viking_room.png", WRAP_REPEAT, FILTER_BILINEAR, true);
 
     render_target_t target = {
         .color_buffer = color_buffer, .sample_count = msaa_level, .z_buffer = depth};
@@ -323,7 +272,16 @@ int main(void)
                        .Kd = 0.8f,
                        .Ks = 1.2f,
                        .shininess = 128.0f,
-                       .texture = texture};
+                       .texture = viking_tex};
+
+    funiform_t funi2 = {.light_pos = {-5.0f, 5.0f, 5.0f},
+                       .camera_pos = eyepos,
+                       .light_color = {1.0f, 1.0f, 1.0f},
+                       .Ka = 0.25f,
+                       .Kd = 0.8f,
+                       .Ks = 1.2f,
+                       .shininess = 128.0f,
+                       .texture = NULL};
 
     uint64_t last_time = window_get_time();
     uint64_t last_fps_update = last_time;
@@ -364,18 +322,40 @@ int main(void)
         float t = (float)t_ms / 1000.0f;
         float angle = t * 1.0f;
 
-        mat4f_t model = mat4f_mul(mat4f_scale_m(0.8f, 0.8f, 0.8f), mat4f_rotate_y(angle));
-        model = mat4f_mul(mat4f_translate(0.0f, 0.0f, 4.0f * sinf(t) - 3.0f), model);
+        mat4f_t model = mat4f_mul(mat4f_scale_m(1.3f, 1.3f, 1.3f), mat4f_rotate_y(-2.5f));
+        model = mat4f_mul(mat4f_translate(0.0f, -.8f, 0.f), model);
         mat4f_t normal_matrix;
         mat4f_inverse(model, &normal_matrix);
         normal_matrix = mat4f_transpose(normal_matrix);
+
 
         vuniform_t vunif = {.model = model,
                             .normal_matrix = normal_matrix,
                             .viewing_projection = mat4f_mul(projection, viewing)};
 
-        program_draw(program, target, attr, 4, sizeof(vertex_t), vertices, (uint32_t)vertex_count,
-                     indices, (uint32_t)vertex_count, (void *)&vunif, (void *)&funi);
+        mat4f_t model2 = mat4f_mul(mat4f_scale_m(1.f, 1.f, 1.f), mat4f_rotate_y(0.5f * angle));
+        model2 = mat4f_mul(mat4f_translate(sinf(t) * 1.0f, 0, 0.0f), model2);
+        mat4f_t normal_matrix2;
+        mat4f_inverse(model2, &normal_matrix2);
+        normal_matrix2 = mat4f_transpose(normal_matrix2);
+
+        vuniform_t vunif2 = {
+            .model = model2,
+            .normal_matrix = normal_matrix2,
+            .viewing_projection = mat4f_mul(projection, viewing)
+        };
+
+        // program_draw(program, target, attr, 4, sizeof(vertex_t), bunny->vertices, (uint32_t)bunny->vertices_count,
+        //              bunny->indices, (uint32_t)bunny->indices_count, (void *)&vunif2, (void *)&funi2);
+        // program_draw(program, target, attr, 4, sizeof(vertex_t), sphere->vertices, (uint32_t)sphere->vertices_count,
+        //              sphere->indices, (uint32_t)sphere->indices_count, (void *)&vunif, (void *)&funi);
+        // program_draw(program, target, attr, 4, sizeof(vertex_t), cube->vertices, (uint32_t)cube->vertices_count,
+        //              cube->indices, (uint32_t)cube->indices_count, (void *)&vunif, (void *)&funi);
+        // program_draw(program, target, attr, 4, sizeof(vertex_t), cube->vertices, (uint32_t)cube->vertices_count,
+        //      cube->indices, (uint32_t)cube->indices_count, (void *)&vunif2, (void *)&funi2);
+        program_draw(program, target, attr, 4, sizeof(vertex_t), viking_room->vertices, (uint32_t)viking_room->vertices_count,
+                     viking_room->indices, (uint32_t)viking_room->indices_count, &vunif, &funi);
+
 
         msaa_resolve(fb, stride, bpp, w, h);
 
@@ -399,6 +379,9 @@ int main(void)
     }
 
 done:
+    mesh_free(cube);
+    mesh_free(sphere);
+    mesh_free(bunny);
     texture_free(texture);
     free(depth);
     free(color_buffer);
