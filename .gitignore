@@ -5,4 +5,6 @@ cmake-build-*/
 compile_commands.json
 Rasterization
 Rasterization.exe
+sr
+sr.exe
 .DS_Store

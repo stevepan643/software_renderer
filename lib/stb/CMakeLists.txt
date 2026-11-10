@@ -1,6 +1,6 @@
 add_library(stb STATIC
-        stb_image.c
-        stb_image_write.c
+        stb_image.cpp
+        stb_image_write.cpp
 )
 
 target_include_directories(stb
